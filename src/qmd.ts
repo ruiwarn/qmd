@@ -2345,6 +2345,13 @@ function showHelp(): void {
   console.log("  --max-bytes <num>          - Skip files larger than N bytes (default: 10240)");
   console.log("  --json/--csv/--md/--xml/--files - Output format (same as search)");
   console.log("");
+  const mc = loadModelConfig();
+  const isCustom = (uri: string, defaultUri: string) => uri !== defaultUri ? " (custom)" : "";
+  console.log("Models (auto-downloaded from HuggingFace, configurable in index.yml → models):");
+  console.log(`  Embedding:   ${modelDisplayName(mc.embed)}${isCustom(mc.embed, DEFAULT_EMBED_MODEL_URI)}`);
+  console.log(`  Reranking:   ${modelDisplayName(mc.rerank)}${isCustom(mc.rerank, DEFAULT_RERANK_MODEL_URI)}`);
+  console.log(`  Generation:  ${modelDisplayName(mc.generate)}${isCustom(mc.generate, DEFAULT_GENERATE_MODEL_URI)}`);
+  console.log("");
   console.log(`Index: ${getDbPath()}`);
 }
 
@@ -2537,21 +2544,20 @@ if (import.meta.main) {
       await updateCollections();
       break;
 
-    case "embed":
-      await vectorIndex(DEFAULT_EMBED_MODEL, !!cli.values.force);
+    case "embed": {
+      const mc = loadModelConfig();
+      await vectorIndex(mc.embed, !!cli.values.force);
       break;
+    }
 
     case "pull": {
       const refresh = cli.values.refresh === undefined ? false : Boolean(cli.values.refresh);
-      const models = [
-        DEFAULT_EMBED_MODEL_URI,
-        DEFAULT_GENERATE_MODEL_URI,
-        DEFAULT_RERANK_MODEL_URI,
-      ];
+      const mc = loadModelConfig();
+      const models = [mc.embed, mc.generate, mc.rerank];
       console.log(`${c.bold}Pulling models${c.reset}`);
       const results = await pullModels(models, {
         refresh,
-        cacheDir: DEFAULT_MODEL_CACHE_DIR,
+        cacheDir: mc.cacheDir,
       });
       for (const result of results) {
         const size = formatBytes(result.sizeBytes);
@@ -2579,7 +2585,10 @@ if (import.meta.main) {
       if (!cli.values["min-score"]) {
         cli.opts.minScore = 0.3;
       }
-      await vectorSearch(cli.query, cli.opts);
+      {
+        const mc = loadModelConfig();
+        await vectorSearch(cli.query, cli.opts, mc.embed);
+      }
       break;
 
     case "query":
@@ -2588,7 +2597,10 @@ if (import.meta.main) {
         console.error("Usage: qmd query [options] <query>");
         process.exit(1);
       }
-      await querySearch(cli.query, cli.opts);
+      {
+        const mc = loadModelConfig();
+        await querySearch(cli.query, cli.opts, mc.embed, mc.rerank);
+      }
       break;
 
     case "mcp": {
